@@ -27,7 +27,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // Blur Parameters ====================
 
-uniform float2 UI_BlurCenter <
+uniform float2 UI_BlurCentre <
     ui_type = "slider";
     ui_label = "Center of Image";
     ui_category = "Blur Adjustments";
@@ -87,16 +87,16 @@ float2 Rotate(float2 uv, float2 pivot, float angle)
 // Main Function
 //============================================================================================
 
-float4 RadialBlur(float2 texCoords, float2 center, float strength, int quality, float falloff, float taperStrength)
+float4 RadialBlur(float2 texCoords, float2 centre, float strength, int quality, float falloff, float taperStrength)
 {
 	float4 Colour = float4(0.0, 0.0, 0.0, 1.0);
 
 	// there was probably a better way to make it AR agnostic, but this does the trick mostly :)
     float aspectRatio = BUFFER_WIDTH / BUFFER_HEIGHT;
 	float2 adjustedCoords = float2(texCoords.x, texCoords.y / aspectRatio);
-    float2 adjustedCenter = float2(center.x, center.y / aspectRatio);
+    float2 adjustedCentre = float2(centre.x, centre.y / aspectRatio);
 
-    float distance = length(adjustedCoords - adjustedCenter);
+    float distance = length(adjustedCoords - adjustedCentre);
     float falloffFactor = pow(distance, falloff);
 
     float taperBase = 1.0 - taperStrength;
@@ -108,16 +108,16 @@ float4 RadialBlur(float2 texCoords, float2 center, float strength, int quality, 
         float taperWeight = taperBase + taperStrength * (1.0 - abs(float(i) / quality));
 
         // positive rotation +
-        float2 rotatedCoords = Rotate(adjustedCoords, adjustedCenter, angle);
+        float2 rotatedCoords = Rotate(adjustedCoords, adjustedCentre, angle);
         rotatedCoords.y *= aspectRatio;
-        float3 sampleColor = sRGBToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
-        Colour.rgb += sampleColor * taperWeight;
+        float3 sampleColour = sRGBToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
+        Colour.rgb += sampleColour * taperWeight;
 
         // negative rotation -
-        rotatedCoords = Rotate(adjustedCoords, adjustedCenter, -angle);
+        rotatedCoords = Rotate(adjustedCoords, adjustedCentre, -angle);
         rotatedCoords.y *= aspectRatio;
-        sampleColor = sRGBToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
-        Colour.rgb += sampleColor * taperWeight;
+        sampleColour = sRGBToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
+        Colour.rgb += sampleColour * taperWeight;
     }
 
     // normalise and convert back
@@ -146,7 +146,7 @@ float4 ApplyBlur(float4 pos : SV_Position, float2 texCoords : TexCoord) : SV_Tar
     float dynamicQuality = lerp(5, 100, UI_BlurStrength) * (1.0 / max(adjustedFalloff, 0.001));
     dynamicQuality = clamp(dynamicQuality, 5.0, 300);
     
-    return RadialBlur(texCoords, UI_BlurCenter, adjustedBlurStrength, dynamicQuality, adjustedFalloff, TaperStrength);
+    return RadialBlur(texCoords, UI_BlurCentre, adjustedBlurStrength, dynamicQuality, adjustedFalloff, TaperStrength);
 }
 
 //============================================================================================
