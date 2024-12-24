@@ -18,7 +18,24 @@ HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTIO
 OF CONTRACT, TORT OR OTHERWISE,ARISING FROM, OUT OF OR IN CONNECTION WITH THE 
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 =================================================================================== */
-#if BUFFER_COLOR_SPACE == 2
+
+#define SDR 0
+#define HDR10 1
+#define LINEAR 2
+
+#ifndef _COLOUR_SPACE_OVERRIDE
+    #if (BUFFER_COLOR_SPACE == 1)
+        #define _COLOUR_SPACE_OVERRIDE SDR
+    #elif (BUFFER_COLOR_SPACE == 2)
+        #define _COLOUR_SPACE_OVERRIDE LINEAR
+    #elif (BUFFER_COLOR_SPACE == 3)
+        #define _COLOUR_SPACE_OVERRIDE HDR10
+    #else
+        #define _COLOUR_SPACE_OVERRIDE SDR // Default to sRGB for unknown BUFFER_COLOR_SPACE
+    #endif
+#endif
+
+#if BUFFER_COLOR_SPACE == 2 || _COLOUR_SPACE_OVERRIDE == LINEAR
 
 	#include "Reshade.fxh"
 	

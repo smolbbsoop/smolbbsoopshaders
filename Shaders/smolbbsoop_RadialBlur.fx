@@ -27,7 +27,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // Blur Parameters ====================
 
-uniform float2 UI_BlurCentre <
+uniform float2 UI_BlurCenter <
     ui_type = "slider";
     ui_label = "Center of Image";
     ui_category = "Blur Adjustments";
@@ -50,13 +50,32 @@ uniform float UI_Falloff <
     ui_min = 0.0;
     ui_max = 1.0;
     > = 0.6;
+
+// Testing Parameters ====================
+
+uniform int UI_ColourSpace <
+	ui_type = "combo";
+    ui_label = "Input Colour Space";
+    ui_items = "sRGB / Gamma 2.2\0scRGB HDR / Linear\0HDR10 PQ\0";
+    ui_tooltip = "Select the colour space being used for input (In most cases this will be sRGB).";
+    ui_category = "Experimental";
+> = 0;
     
 //============================================================================================
 // Textures / Samplers / Defines
 //============================================================================================
     
 sampler BackBuffer { Texture = ReShade::BackBufferTex; MagFilter = POINT; MinFilter = POINT; MipFilter = POINT; AddressU = CLAMP; AddressV = CLAMP; AddressW = CLAMP; };
-	
+
+#define RES float2(BUFFER_WIDTH, BUFFER_HEIGHT)
+
+// HDR10 PQ constants
+#define PQ_m1 0.1593017578125
+#define PQ_m2 78.84375
+#define PQ_c1 0.8359375
+#define PQ_c2 18.8515625
+#define PQ_c3 18.6875
+
 //============================================================================================
 // Functions
 //============================================================================================
@@ -73,6 +92,29 @@ float3 LinearTosRGB(float3 x)
     return x < 0.0031308 ? 12.92 * x : 1.055 * pow(x, 1.0 / 2.4) - 0.055; 
 }
 
+float3 HDR10ToLinear(float3 encodedHDR)
+{
+    float3 ePrimePower = pow(encodedHDR, 1.0 / PQ_m2);
+    float3 numerator = max(ePrimePower - PQ_c1, 0.0);
+    float3 denominator = PQ_c2 - PQ_c3 * ePrimePower;
+    float3 linearHDR = pow(numerator / denominator, 1.0 / PQ_m1);
+
+    return linearHDR * 600.0;
+}
+
+float3 LinearToHDR10(float3 linearHDR)
+{
+    float3 normalizedHDR = saturate(linearHDR / 600.0);
+
+    float3 hdr10Color = pow(
+        (PQ_c1 + PQ_c2 * pow(normalizedHDR, PQ_m1)) /
+        (1.0 + PQ_c3 * pow(normalizedHDR, PQ_m1)),
+        PQ_m2
+    );
+
+    return hdr10Color;
+}
+
 float2 Rotate(float2 uv, float2 pivot, float angle)
 {
     float s = sin(angle);
@@ -87,16 +129,16 @@ float2 Rotate(float2 uv, float2 pivot, float angle)
 // Main Function
 //============================================================================================
 
-float4 RadialBlur(float2 texCoords, float2 centre, float strength, int quality, float falloff, float taperStrength)
+float4 RadialBlur(float2 texCoords, float2 center, float strength, int quality, float falloff, float taperStrength)
 {
 	float4 Colour = float4(0.0, 0.0, 0.0, 1.0);
 
 	// there was probably a better way to make it AR agnostic, but this does the trick mostly :)
-    float aspectRatio = BUFFER_WIDTH / BUFFER_HEIGHT;
+    float aspectRatio = RES.x / RES.y;
 	float2 adjustedCoords = float2(texCoords.x, texCoords.y / aspectRatio);
-    float2 adjustedCentre = float2(centre.x, centre.y / aspectRatio);
-
-    float distance = length(adjustedCoords - adjustedCentre);
+    float2 adjustedCenter = float2(center.x, center.y / aspectRatio);
+	
+    float distance = length(adjustedCoords - adjustedCenter);
     float falloffFactor = pow(distance, falloff);
 
     float taperBase = 1.0 - taperStrength;
@@ -108,21 +150,62 @@ float4 RadialBlur(float2 texCoords, float2 centre, float strength, int quality, 
         float taperWeight = taperBase + taperStrength * (1.0 - abs(float(i) / quality));
 
         // positive rotation +
-        float2 rotatedCoords = Rotate(adjustedCoords, adjustedCentre, angle);
+        float2 rotatedCoords = Rotate(adjustedCoords, adjustedCenter, angle);
         rotatedCoords.y *= aspectRatio;
-        float3 sampleColour = sRGBToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
-        Colour.rgb += sampleColour * taperWeight;
+        
+        float3 sampleColor;
+        
+        if (UI_ColourSpace == 0)
+        {
+        	sampleColor = sRGBToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
+        }
+        else if (UI_ColourSpace == 1)
+        {
+        	sampleColor = tex2D(ReShade::BackBuffer, rotatedCoords).rgb;
+        }
+        else if (UI_ColourSpace == 2)
+        {
+        	sampleColor = HDR10ToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
+        }
+        
+        Colour.rgb += sampleColor * taperWeight;
 
         // negative rotation -
-        rotatedCoords = Rotate(adjustedCoords, adjustedCentre, -angle);
+        rotatedCoords = Rotate(adjustedCoords, adjustedCenter, -angle);
         rotatedCoords.y *= aspectRatio;
-        sampleColour = sRGBToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
-        Colour.rgb += sampleColour * taperWeight;
+        
+        if (UI_ColourSpace == 0)
+        {
+        	sampleColor = sRGBToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
+        }
+        else if (UI_ColourSpace == 1)
+        {
+        	sampleColor = tex2D(ReShade::BackBuffer, rotatedCoords).rgb;
+        }
+        else if (UI_ColourSpace == 2)
+        {
+        	sampleColor = HDR10ToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
+        }
+        
+        Colour.rgb += sampleColor * taperWeight;
     }
 
     // normalise and convert back
     Colour.rgb /= (quality * taperCompensation);
-    Colour.rgb = LinearTosRGB(Colour.rgb);
+    //Colour.rgb = LinearTosRGB(Colour.rgb);
+    
+    if (UI_ColourSpace == 0)
+    {
+    	Colour.rgb = LinearTosRGB(Colour.rgb);
+    }
+    else if (UI_ColourSpace == 1)
+    {
+    	Colour.rgb = Colour.rgb;
+    }
+    else if (UI_ColourSpace == 2)
+    {
+    	Colour.rgb = LinearToHDR10(Colour.rgb);
+    }
 
     return Colour;
 }
@@ -146,7 +229,7 @@ float4 ApplyBlur(float4 pos : SV_Position, float2 texCoords : TexCoord) : SV_Tar
     float dynamicQuality = lerp(5, 100, UI_BlurStrength) * (1.0 / max(adjustedFalloff, 0.001));
     dynamicQuality = clamp(dynamicQuality, 5.0, 300);
     
-    return RadialBlur(texCoords, UI_BlurCentre, adjustedBlurStrength, dynamicQuality, adjustedFalloff, TaperStrength);
+    return RadialBlur(texCoords, UI_BlurCenter, adjustedBlurStrength, dynamicQuality, adjustedFalloff, TaperStrength);
 }
 
 //============================================================================================
