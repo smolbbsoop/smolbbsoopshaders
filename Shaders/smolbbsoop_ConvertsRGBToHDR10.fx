@@ -33,29 +33,29 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	static const float PQ_c3 = 18.6875;         // c3 = 2392 / 4096 * 32
 	
 	// thanks to TreyM for posting this in the ReShade Discord's code chat :3
-	float3 SRGBToLinear(float3 color)
+	float3 sRGBToLinear(float3 colour)
 	{
-	    return color < 0.04045 ? color / 12.92 : pow((color + 0.055) / 1.055, 2.4);
+	    return colour < 0.04045 ? colour / 12.92 : pow((colour + 0.055) / 1.055, 2.4);
 	}
 	
 	float3 LinearToPQ(float3 linearHDR)
 	{
 	    float3 normalizedHDR = saturate((linearHDR + 0.01) / 10000.0);
-	    float3 pqColor = pow((PQ_c1 + PQ_c2 * pow(normalizedHDR, PQ_m1)) / (1.0 + PQ_c3 * pow(normalizedHDR, PQ_m1)), PQ_m2);
-	    return pqColor;
+	    float3 pqColour = pow((PQ_c1 + PQ_c2 * pow(normalizedHDR, PQ_m1)) / (1.0 + PQ_c3 * pow(normalizedHDR, PQ_m1)), PQ_m2);
+	    return pqColour;
 	}
 	
 	//============================================================================================
 	// Shader
 	//============================================================================================
 	
-	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 color : SV_Target)
+	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 colour : SV_Target)
 	{
-	    float4 srgbColor = tex2D(ReShade::BackBuffer, texcoord);
-	    float3 linearColor = SRGBToLinear(srgbColor.rgb);
-	    float3 hdr10Color = LinearToPQ(linearColor * 10000.0);
+	    float4 srgbColour = tex2D(ReShade::BackBuffer, texcoord);
+	    float3 linearColour = sRGBToLinear(srgbColour.rgb);
+	    float3 hdr10Colour = LinearToPQ(linearColour * 1810.0);
 	
-	    color = float4(hdr10Color, srgbColor.a);
+	    colour = float4(hdr10Colour, srgbColour.a);
 	}
 	
 	//============================================================================================

@@ -19,28 +19,19 @@ OF CONTRACT, TORT OR OTHERWISE,ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 =================================================================================== */
 
-#define SDR 0
-#define HDR10 1
-#define LINEAR 2
-
-#ifndef _COLOUR_SPACE_OVERRIDE
-    #if (BUFFER_COLOR_SPACE == 1)
-        #define _COLOUR_SPACE_OVERRIDE SDR
-    #elif (BUFFER_COLOR_SPACE == 2)
-        #define _COLOUR_SPACE_OVERRIDE LINEAR
-    #elif (BUFFER_COLOR_SPACE == 3)
-        #define _COLOUR_SPACE_OVERRIDE HDR10
-    #else
-        #define _COLOUR_SPACE_OVERRIDE SDR // Default to sRGB for unknown BUFFER_COLOR_SPACE
-    #endif
-#endif
-
-#if BUFFER_COLOR_SPACE == 2 || _COLOUR_SPACE_OVERRIDE == LINEAR
+#if BUFFER_COLOR_SPACE == 2
 	#include "Reshade.fxh"
 	
 	//============================================================================================
 	// Functions
 	//============================================================================================
+	
+	// Tonemap function (e.g., Reinhard, or a custom tonemap)
+	float3 Tonemap(float3 colour)
+	{
+	    // Example: Reinhard tonemap
+	    return colour / (1.0 + colour);
+	}
 	
 	// thanks to TreyM for posting this in the ReShade Discord's code chat :3
 	float3 LinearToSRGB(float3 x)
@@ -52,12 +43,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	// Shader
 	//============================================================================================
 	
-	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 color : SV_Target)
+	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 colour : SV_Target)
 	{
-	    float4 LinearColor = tex2D(ReShade::BackBuffer, texcoord);
-	    float3 sRGBColor = LinearToSRGB(LinearColor.rgb);
+	    float4 LinearColour = tex2D(ReShade::BackBuffer, texcoord);
+	    float3 TonemappedColour = Tonemap(LinearColour.rgb);
+	    float3 sRGBColour = LinearToSRGB(TonemappedColour.rgb);
 	
-	    color = float4(sRGBColor, LinearColor.a);
+	    colour = float4(sRGBColour, LinearColour.a);
 	}
 	
 	//============================================================================================

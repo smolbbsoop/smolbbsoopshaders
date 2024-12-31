@@ -19,23 +19,7 @@ OF CONTRACT, TORT OR OTHERWISE,ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 =================================================================================== */
 
-#define SDR 0
-#define HDR10 1
-#define LINEAR 2
-
-#ifndef _COLOUR_SPACE_OVERRIDE
-    #if (BUFFER_COLOR_SPACE == 1)
-        #define _COLOUR_SPACE_OVERRIDE SDR
-    #elif (BUFFER_COLOR_SPACE == 2)
-        #define _COLOUR_SPACE_OVERRIDE LINEAR
-    #elif (BUFFER_COLOR_SPACE == 3)
-        #define _COLOUR_SPACE_OVERRIDE HDR10
-    #else
-        #define _COLOUR_SPACE_OVERRIDE SDR // Default to sRGB for unknown BUFFER_COLOR_SPACE
-    #endif
-#endif
-
-#if BUFFER_COLOR_SPACE == 2 || _COLOUR_SPACE_OVERRIDE == LINEAR
+#if BUFFER_COLOR_SPACE == 2
 
 	#include "Reshade.fxh"
 	
@@ -43,22 +27,28 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	// Functions
 	//============================================================================================
 	
-	// thanks to TreyM for posting this in the ReShade Discord's code chat :3
-	float3 SRGBToLinear(float3 color)
+	float3 InvTonemap(float3 colour)
 	{
-	    return color < 0.04045 ? color / 12.92 : pow((color + 0.055) / 1.055, 2.4);
+	    return colour / (1.0 - colour + 0.38);  // Inverse Reinhard tonemap
+	}
+	
+	// thanks to TreyM for posting this in the ReShade Discord's code chat :3
+	float3 sRGBToLinear(float3 colour)
+	{
+	    return colour < 0.04045 ? colour / 12.92 : pow((colour + 0.055) / 1.055, 2.4);
 	}
 	
 	//============================================================================================
 	// Shader
 	//============================================================================================
 	
-	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 color : SV_Target)
+	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 colour : SV_Target)
 	{
-	    float4 scRGBColor = tex2D(ReShade::BackBuffer, texcoord);
-	    float3 linearHDRColor = SRGBToLinear(scRGBColor.rgb);
+	    float4 sRGBColour = tex2D(ReShade::BackBuffer, texcoord);
+	    float3 InvTonemappedColour = InvTonemap(sRGBColour.rgb);
+	    float3 LinearColour = sRGBToLinear(InvTonemappedColour.rgb);
 	
-	    color = float4(linearHDRColor, scRGBColor.a);
+	    colour = float4(LinearColour, sRGBColour.a);
 	}
 	
 	//============================================================================================

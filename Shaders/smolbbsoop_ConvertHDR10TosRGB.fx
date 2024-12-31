@@ -43,7 +43,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	}
 	
 	// thanks to TreyM for posting this in the ReShade Discord's code chat :3
-	float3 LinearToSRGB(float3 x)
+	float3 LinearTosRGB(float3 x)
 	{
 	    return x < 0.0031308 ? 12.92 * x : 1.055 * pow(x, 1.0 / 2.4) - 0.055;
 	}
@@ -52,13 +52,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	// Shader
 	//============================================================================================
 	
-	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 color : SV_Target)
+	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 colour : SV_Target)
 	{
-	    float4 hdrColor = tex2D(ReShade::BackBuffer, texcoord);
-	    float3 linearColor = PQToLinear(hdrColor.rgb);
-	    float3 srgbColor = LinearToSRGB(linearColor / 10000.0); // Normalize to [0, 1] for sRGB
+	    float4 hdrColour = tex2D(ReShade::BackBuffer, texcoord);
+	    float3 linearColour = PQToLinear(hdrColour.rgb);
+	    float3 srgbColour = LinearTosRGB(linearColour / 1810.0); // Normalize to [0, 1] for sRGB
 	
-	    color = float4(srgbColor, hdrColor.a); // Preserve alpha
+	    colour = float4(srgbColour, hdrColour.a); // Preserve alpha
 	}
 	
 	//============================================================================================
