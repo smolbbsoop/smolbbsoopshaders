@@ -50,22 +50,28 @@ uniform float UI_Falloff <
     ui_min = 0.0;
     ui_max = 1.0;
     > = 0.6;
-
-// Testing Parameters ====================
-
-uniform int UI_ColourSpace <
-	ui_type = "combo";
-    ui_label = "Input Colour Space";
-    ui_items = "sRGB / Gamma 2.2\0scRGB HDR / Linear\0HDR10 PQ\0";
-    ui_tooltip = "Select the colour space being used for input (In most cases this will be sRGB).";
-    ui_category = "Experimental";
-> = 0;
     
 //============================================================================================
 // Textures / Samplers / Defines
 //============================================================================================
     
 sampler BackBuffer { Texture = ReShade::BackBufferTex; MagFilter = POINT; MinFilter = POINT; MipFilter = POINT; AddressU = CLAMP; AddressV = CLAMP; AddressW = CLAMP; };
+
+#define SOOP_SRGB 1
+#define SOOP_SCRGB 2
+#define SOOP_HDR10 3
+
+#ifndef _SOOP_COLOUR_SPACE
+    #if (BUFFER_COLOR_SPACE == 1)
+        #define _SOOP_COLOUR_SPACE SOOP_SRGB
+    #elif (BUFFER_COLOR_SPACE == 2)
+        #define _SOOP_COLOUR_SPACE SOOP_SCRGB
+    #elif (BUFFER_COLOR_SPACE == 3)
+        #define _SOOP_COLOUR_SPACE SOOP_HDR10
+    #else
+        #define _SOOP_COLOUR_SPACE SOOP_SRGB
+    #endif
+#endif
 
 #define RES float2(BUFFER_WIDTH, BUFFER_HEIGHT)
 
@@ -99,20 +105,20 @@ float3 HDR10ToLinear(float3 encodedHDR)
     float3 denominator = PQ_c2 - PQ_c3 * ePrimePower;
     float3 linearHDR = pow(numerator / denominator, 1.0 / PQ_m1);
 
-    return linearHDR * 600.0;
+    return linearHDR * 10000.0;
 }
 
 float3 LinearToHDR10(float3 linearHDR)
 {
-    float3 normalizedHDR = saturate(linearHDR / 600.0);
+    float3 normalizedHDR = saturate(linearHDR / 10000.0);
 
-    float3 hdr10Color = pow(
+    float3 hdr10Colour = pow(
         (PQ_c1 + PQ_c2 * pow(normalizedHDR, PQ_m1)) /
         (1.0 + PQ_c3 * pow(normalizedHDR, PQ_m1)),
         PQ_m2
     );
 
-    return hdr10Color;
+    return hdr10Colour;
 }
 
 float2 Rotate(float2 uv, float2 pivot, float angle)
@@ -153,60 +159,63 @@ float4 RadialBlur(float2 texCoords, float2 center, float strength, int quality, 
         float2 rotatedCoords = Rotate(adjustedCoords, adjustedCenter, angle);
         rotatedCoords.y *= aspectRatio;
         
-        float3 sampleColor;
+        float3 sampleColour;
         
-        if (UI_ColourSpace == 0)
-        {
-        	sampleColor = sRGBToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
-        }
-        else if (UI_ColourSpace == 1)
-        {
-        	sampleColor = tex2D(ReShade::BackBuffer, rotatedCoords).rgb;
-        }
-        else if (UI_ColourSpace == 2)
-        {
-        	sampleColor = HDR10ToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
-        }
+        #if _SOOP_COLOUR_SPACE == 1
+		
+    		sampleColour = sRGBToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
+		
+        #elif _SOOP_COLOUR_SPACE == 2
+		
+    		sampleColour = tex2D(ReShade::BackBuffer, rotatedCoords).rgb;
+		
+        #elif _SOOP_COLOUR_SPACE == 3
         
-        Colour.rgb += sampleColor * taperWeight;
+			sampleColour = HDR10ToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
+		
+        #endif
+        
+        Colour.rgb += sampleColour * taperWeight;
 
         // negative rotation -
         rotatedCoords = Rotate(adjustedCoords, adjustedCenter, -angle);
         rotatedCoords.y *= aspectRatio;
         
-        if (UI_ColourSpace == 0)
-        {
-        	sampleColor = sRGBToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
-        }
-        else if (UI_ColourSpace == 1)
-        {
-        	sampleColor = tex2D(ReShade::BackBuffer, rotatedCoords).rgb;
-        }
-        else if (UI_ColourSpace == 2)
-        {
-        	sampleColor = HDR10ToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
-        }
+        #if _SOOP_COLOUR_SPACE == 1
         
-        Colour.rgb += sampleColor * taperWeight;
+        	sampleColour = sRGBToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
+        
+        #elif _SOOP_COLOUR_SPACE == 2
+        
+        	sampleColour = tex2D(ReShade::BackBuffer, rotatedCoords).rgb;
+        
+        #elif _SOOP_COLOUR_SPACE == 3
+        
+        	sampleColour = HDR10ToLinear(tex2D(ReShade::BackBuffer, rotatedCoords).rgb);
+        
+        #endif
+        
+        Colour.rgb += sampleColour * taperWeight;
     }
 
     // normalise and convert back
     Colour.rgb /= (quality * taperCompensation);
     //Colour.rgb = LinearTosRGB(Colour.rgb);
     
-    if (UI_ColourSpace == 0)
-    {
+    #if _SOOP_COLOUR_SPACE == 1
+    
     	Colour.rgb = LinearTosRGB(Colour.rgb);
-    }
-    else if (UI_ColourSpace == 1)
-    {
+    
+    #elif _SOOP_COLOUR_SPACE == 2
+    
     	Colour.rgb = Colour.rgb;
-    }
-    else if (UI_ColourSpace == 2)
-    {
+    
+    #elif _SOOP_COLOUR_SPACE == 3
+    
     	Colour.rgb = LinearToHDR10(Colour.rgb);
-    }
-
+    
+	#endif
+	
     return Colour;
 }
 
