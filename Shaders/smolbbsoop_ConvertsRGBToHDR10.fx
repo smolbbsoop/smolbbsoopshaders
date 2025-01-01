@@ -19,12 +19,33 @@ OF CONTRACT, TORT OR OTHERWISE,ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 =================================================================================== */
 
-#if BUFFER_COLOR_SPACE == 3
+//============================================================================================
+// Definitions
+//============================================================================================
+
+#define SOOP_SRGB 1
+#define SOOP_SCRGB 2
+#define SOOP_HDR10 3
+
+#ifndef _SOOP_COLOUR_SPACE
+    #if (BUFFER_COLOR_SPACE == 1)
+        #define _SOOP_COLOUR_SPACE SOOP_SRGB
+    #elif (BUFFER_COLOR_SPACE == 2)
+        #define _SOOP_COLOUR_SPACE SOOP_SCRGB
+    #elif (BUFFER_COLOR_SPACE == 3)
+        #define _SOOP_COLOUR_SPACE SOOP_HDR10
+    #else
+        #define _SOOP_COLOUR_SPACE SOOP_SRGB
+    #endif
+#endif
+
+#if _SOOP_COLOUR_SPACE == 3
+	
 	#include "ReShade.fxh"
 	
-	//============================================================================================
-	// Functions
-	//============================================================================================
+//============================================================================================
+// Functions
+//============================================================================================
 	
 	static const float PQ_m1 = 0.1593017578125; // m1 = 2610 / 16384
 	static const float PQ_m2 = 78.84375;        // m2 = (2523 / 4096) * 128
@@ -45,9 +66,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	    return pqColour;
 	}
 	
-	//============================================================================================
-	// Shader
-	//============================================================================================
+//============================================================================================
+// Shader
+//============================================================================================
 	
 	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 colour : SV_Target)
 	{
@@ -58,9 +79,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	    colour = float4(hdr10Colour, srgbColour.a);
 	}
 	
-	//============================================================================================
-	// Technique / Passes
-	//============================================================================================
+//============================================================================================
+// Technique / Passes
+//============================================================================================
 	
 	technique sRGBToHDR10 < ui_label = "sRGB to HDR10 PQ"; ui_tooltip = "A simple shader to convert sRGB to HDR10 PQ. \nUseful for working with SDR only shaders when working in HDR10."; >
 	{
@@ -74,7 +95,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	uniform int ColourSpaceWarning <
 		ui_type = "radio";
 		ui_text = "The detected colour space is not intended to be used with this shader."
-			"\nPlease ensure you are playing in HDR10 PQ when using this shader. \nThis shader cannot convert SDR to HDR.";
+			"\nPlease ensure you are playing in HDR10 PQ when using this shader. \nThis shader cannot convert SDR to HDR."
+			"\n\nIf the HDR format has been detected incorrectly, please use the _SOOP_COLOUR_SPACE Global Preprocessor to override to the correct format."
+			"\nFor this shader, override to SOOP_HDR10";
 		ui_label = " ";
 		> = 0;
 			

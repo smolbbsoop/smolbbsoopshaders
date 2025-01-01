@@ -19,17 +19,36 @@ OF CONTRACT, TORT OR OTHERWISE,ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 =================================================================================== */
 
-#if BUFFER_COLOR_SPACE == 2
+//============================================================================================
+// Definitions
+//============================================================================================
+
+#define SOOP_SRGB 1
+#define SOOP_SCRGB 2
+#define SOOP_HDR10 3
+
+#ifndef _SOOP_COLOUR_SPACE
+    #if (BUFFER_COLOR_SPACE == 1)
+        #define _SOOP_COLOUR_SPACE SOOP_SRGB
+    #elif (BUFFER_COLOR_SPACE == 2)
+        #define _SOOP_COLOUR_SPACE SOOP_SCRGB
+    #elif (BUFFER_COLOR_SPACE == 3)
+        #define _SOOP_COLOUR_SPACE SOOP_HDR10
+    #else
+        #define _SOOP_COLOUR_SPACE SOOP_SRGB
+    #endif
+#endif
+
+#if _SOOP_COLOUR_SPACE == 2
+	
 	#include "Reshade.fxh"
 	
-	//============================================================================================
-	// Functions
-	//============================================================================================
+//============================================================================================
+// Functions
+//============================================================================================
 	
-	// Tonemap function (e.g., Reinhard, or a custom tonemap)
 	float3 Tonemap(float3 colour)
 	{
-	    // Example: Reinhard tonemap
 	    return colour / (1.0 + colour);
 	}
 	
@@ -39,9 +58,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	    return x < 0.0031308 ? 12.92 * x : 1.055 * pow(x, 1.0 / 2.4) - 0.055;
 	}
 	
-	//============================================================================================
-	// Shader
-	//============================================================================================
+//============================================================================================
+// Shader
+//============================================================================================
 	
 	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 colour : SV_Target)
 	{
@@ -52,9 +71,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	    colour = float4(sRGBColour, LinearColour.a);
 	}
 	
-	//============================================================================================
-	// Technique / Passes
-	//============================================================================================
+//============================================================================================
+// Technique / Passes
+//============================================================================================
 	
 	technique LinearToSRGB < ui_label = "Linear to sRGB"; ui_tooltip = "A simple shader to convert scene linear to sRGB. \nUseful for working with SDR only shaders when working in scRGB HDR"; >
 	{
@@ -68,7 +87,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	uniform int ColourSpaceWarning <
 		ui_type = "radio";
 		ui_text = "The detected colour space is not intended to be used with this shader."
-			"\nPlease ensure you are playing in scRGB HDR when using this shader. \nThis cannot convert SDR to HDR.";
+			"\nPlease ensure you are playing in scRGB HDR when using this shader. \nThis cannot convert SDR to HDR."
+			"\n\nIf the HDR format has been detected incorrectly, please use the _SOOP_COLOUR_SPACE Global Preprocessor to override to the correct format."
+			"\nFor this shader, override to SOOP_SCRGB";
 		ui_label = " ";
 		> = 0;
 			
