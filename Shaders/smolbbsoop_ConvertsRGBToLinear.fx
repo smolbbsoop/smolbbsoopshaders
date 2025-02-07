@@ -49,7 +49,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	
 	float3 InvTonemap(float3 colour)
 	{
-	    return colour / (1.0 - colour + 0.38);
+	    return colour / (1.0 - colour);
 	}
 	
 	// thanks to TreyM for posting this in the ReShade Discord's code chat :3
@@ -65,10 +65,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 colour : SV_Target)
 	{
 	    float4 sRGBColour = tex2D(ReShade::BackBuffer, texcoord);
-	    float3 InvTonemappedColour = InvTonemap(sRGBColour.rgb);
-	    float3 LinearColour = sRGBToLinear(InvTonemappedColour.rgb);
+	    float3 LinearColour = sRGBToLinear(sRGBColour.rgb);
+	    float3 InvTonemappedColour = InvTonemap(LinearColour.rgb);
 	
-	    colour = float4(LinearColour, sRGBColour.a);
+	    colour = float4(InvTonemappedColour, sRGBColour.a);
 	}
 	
 //============================================================================================
