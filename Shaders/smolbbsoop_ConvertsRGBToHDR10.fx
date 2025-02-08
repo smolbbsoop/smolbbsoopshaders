@@ -46,44 +46,63 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //============================================================================================
 // Functions
 //============================================================================================
-	
-	static const float PQ_m1 = 0.1593017578125; // m1 = 2610 / 16384
-	static const float PQ_m2 = 78.84375;        // m2 = (2523 / 4096) * 128
-	static const float PQ_c1 = 0.8359375;       // c1 = 3424 / 4096
-	static const float PQ_c2 = 18.8515625;      // c2 = 2413 / 4096 * 32
-	static const float PQ_c3 = 18.6875;         // c3 = 2392 / 4096 * 32
-	
-	// thanks to TreyM for posting this in the ReShade Discord's code chat :3
-	float3 sRGBToLinear(float3 colour)
+
+	float PQToLinear(float x)
 	{
-	    return colour < 0.04045 ? colour / 12.92 : pow((colour + 0.055) / 1.055, 2.4);
+	    float m1 = 0.1593017578125;
+	    float m2 = 78.84375;
+	    float c1 = 0.8359375;
+	    float c2 = 18.8515625;
+	    float c3 = 18.6875;
+	
+	    float num = max(pow(x, 1.0 / m2) - c1, 0.0);
+	    float den = c2 - c3 * pow(x, 1.0 / m2);
+	    return pow(num / den, 1.0 / m1) * 80.0;
 	}
 	
-	float3 LinearToPQ(float3 linearHDR)
+	float3 ReinhardTonemap(float3 x)
 	{
-	    float3 normalizedHDR = saturate((linearHDR + 0.01) / 10000.0);
-	    float3 pqColour = pow((PQ_c1 + PQ_c2 * pow(normalizedHDR, PQ_m1)) / (1.0 + PQ_c3 * pow(normalizedHDR, PQ_m1)), PQ_m2);
-	    return pqColour;
+	    return x / (1.0 + x);
+	}
+	
+	// thanks to TreyM for posting this in the ReShade Discord's code chat :3
+	float3 LinearTosRGB(float3 x)
+	{
+	    return x < 0.0031308 ? 12.92 * x : 1.055 * pow(x, 1.0 / 2.4) - 0.055;
+	}
+	
+	float3 Rec2020ToRec709(float3 colour)
+	{
+	    return mul(float3x3
+		(
+	        0.6274, 0.3293, 0.0433,
+	        0.0691, 0.9195, 0.0114,
+	        0.0164, 0.0880, 0.8956
+	    ), colour);
 	}
 	
 //============================================================================================
 // Shader
 //============================================================================================
 	
-	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 colour : SV_Target)
+	float4 ConvertBuffer(float4 pos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target
 	{
-	    float4 srgbColour = tex2D(ReShade::BackBuffer, texcoord);
-	    float3 linearColour = sRGBToLinear(srgbColour.rgb);
-	    float3 hdr10Colour = LinearToPQ(linearColour * 1810.0);
+	    float3 HDRColour = tex2D(ReShade::BackBuffer, texcoord).rgb;
+	    float3 LinearColour = float3(PQToLinear(HDRColour.r), PQToLinear(HDRColour.g), PQToLinear(HDRColour.b));
 	
-	    colour = float4(hdr10Colour, srgbColour.a);
+	    float3 Rec709Colour = Rec2020ToRec709(LinearColour);
+	
+	    float3 TonemappedColour = ReinhardTonemap(Rec709Colour);
+	    float3 sRGBColour = float3(LinearTosRGB(TonemappedColour.rgb));
+	
+	    return float4(sRGBColour, 1.0);
 	}
 	
 //============================================================================================
 // Technique / Passes
 //============================================================================================
 	
-	technique sRGBToHDR10 < ui_label = "sRGB to HDR10 PQ"; ui_tooltip = "A simple shader to convert sRGB to HDR10 PQ. \nUseful for working with SDR only shaders when working in HDR10."; >
+	technique sRGBToHDR10 < ui_label = "sRGB To HDR10 PQ"; ui_tooltip = "A simple shader to convert sRGB to HDR10 PQ. Useful for working with SDR only shaders when working in HDR10"; >
 	{
 	    pass
 	    {
@@ -101,9 +120,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		ui_label = " ";
 		> = 0;
 			
-	technique SRGBToHDR10 <
-		ui_label = "sRGB to HDR10 PQ (Error)";
-		ui_tooltip = "A simple shader to convert sRGB to HDR10 PQ. \nUseful for working with SDR only shaders when working in scRGB HDR \nThe detected colour space is not HDR!";
+	technique HDR10TosRGB <
+		ui_label = "HDR10 PQ to sRGB (Error)";
+		ui_tooltip = "A simple shader to convert HDR10 PQ to sRGB. \nUseful for working with SDR only shaders when working in scRGB HDR \nThe detected colour space is not HDR!";
 		>	
 	{ }
 #endif

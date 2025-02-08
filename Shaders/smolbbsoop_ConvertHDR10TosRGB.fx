@@ -42,51 +42,68 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #if _SOOP_COLOUR_SPACE == 3
 	
 	#include "ReShade.fxh"
-	
+
 //============================================================================================
 // Functions
 //============================================================================================
-	
-	static const float PQ_m1 = 0.1593017578125; // m1 = 2610 / 16384
-	static const float PQ_m2 = 78.84375;        // m2 = (2523 / 4096) * 128
-	static const float PQ_c1 = 0.8359375;       // c1 = 3424 / 4096
-	static const float PQ_c2 = 18.8515625;      // c2 = 2413 / 4096 * 32
-	static const float PQ_c3 = 18.6875;         // c3 = 2392 / 4096 * 32
-	
-	float3 PQToLinear(float3 encodedHDR)
-	{
-	    float3 ePrimePower = pow(encodedHDR, 1.0 / PQ_m2);
-	    float3 numerator = max(ePrimePower - PQ_c1, 0.0);
-	    float3 denominator = PQ_c2 - PQ_c3 * ePrimePower;
-	    float3 linearHDR = pow(numerator / denominator, 1.0 / PQ_m1);
-	
-	    return linearHDR * 10000.0;
-	}
-	
+
 	// thanks to TreyM for posting this in the ReShade Discord's code chat :3
-	float3 LinearTosRGB(float3 x)
+	float3 sRGBToLinear(float3 x)
 	{
-	    return x < 0.0031308 ? 12.92 * x : 1.055 * pow(x, 1.0 / 2.4) - 0.055;
+	    return x < 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4);
 	}
 	
+	float3 Rec709ToRec2020(float3 colour)
+	{
+	    return mul(float3x3
+		(
+	        1.6605, -0.5876, -0.0728,
+	       -0.1246,  1.1329, -0.0083,
+	       -0.0182, -0.1006,  1.1187
+	    ), colour);
+	}
+	
+	float3 InverseReinhard(float3 x)
+	{
+	    return x / (1.0 - x);
+	}
+	
+	float LinearToPQ(float x)
+	{
+	    const float m1 = 0.1593017578125;
+	    const float m2 = 78.84375;
+	    const float c1 = 0.8359375;
+	    const float c2 = 18.8515625;
+	    const float c3 = 18.6875;
+	
+	    float Y = clamp(x / 80.0, 0.0, 1.0);
+	    float num = c1 + c2 * pow(Y, m1);
+	    float den = 1.0 + c3 * pow(Y, m1);
+	    return pow(num / den, m2);
+	}
+
 //============================================================================================
 // Shader
 //============================================================================================
-	
-	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 colour : SV_Target)
+
+	float4 ConvertBuffer(float4 pos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target
 	{
-	    float4 hdrColour = tex2D(ReShade::BackBuffer, texcoord);
-	    float3 linearColour = PQToLinear(hdrColour.rgb);
-	    float3 srgbColour = LinearTosRGB(linearColour / 1810.0); // Normalize to [0, 1] for sRGB
+	    float3 sRGBColour = tex2D(ReShade::BackBuffer, texcoord).rgb;
+	    float3 LinearColour = sRGBToLinear(sRGBColour);
 	
-	    colour = float4(srgbColour, hdrColour.a); // Preserve alpha
+	    float3 Rec2020Colour = Rec709ToRec2020(LinearColour);
+
+	    float3 TonemappedColour = InverseReinhard(Rec2020Colour);
+	    float3 HDRColour = float3(LinearToPQ(TonemappedColour.r), LinearToPQ(TonemappedColour.g), LinearToPQ(TonemappedColour.b));
+	
+	    return float4(HDRColour, 1.0);
 	}
 	
 //============================================================================================
 // Technique / Passes
 //============================================================================================
 	
-	technique HDR10ToSRGB < ui_label = "HDR10 PQ to sRGB"; ui_tooltip = "A simple shader to convert HDR10 PQ to sRGB. Useful for working with SDR only shaders when working in HDR10"; >
+	technique HDR10TosRGB < ui_label = "HDR10 PQ to sRGB"; ui_tooltip = "A simple shader to convert HDR10 PQ to sRGB. \nUseful for working with SDR only shaders when working in HDR10."; >
 	{
 	    pass
 	    {
@@ -104,9 +121,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		ui_label = " ";
 		> = 0;
 			
-	technique HDR10TosRGB <
-		ui_label = "HDR10 PQ to sRGB (Error)";
-		ui_tooltip = "A simple shader to convert HDR10 PQ to sRGB. \nUseful for working with SDR only shaders when working in scRGB HDR \nThe detected colour space is not HDR!";
+	technique SRGBToHDR10 <
+		ui_label = "sRGB to HDR10 PQ (Error)";
+		ui_tooltip = "A simple shader to convert sRGB to HDR10 PQ. \nUseful for working with SDR only shaders when working in scRGB HDR \nThe detected colour space is not HDR!";
 		>	
 	{ }
 #endif
