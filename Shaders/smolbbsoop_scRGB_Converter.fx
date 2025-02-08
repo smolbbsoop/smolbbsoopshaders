@@ -23,50 +23,34 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // Definitions
 //============================================================================================
 
-#define SOOP_SRGB 1
-#define SOOP_SCRGB 2
-#define SOOP_HDR10 3
-
-#ifndef _SOOP_COLOUR_SPACE
-    #if (BUFFER_COLOR_SPACE == 1)
-        #define _SOOP_COLOUR_SPACE SOOP_SRGB
-    #elif (BUFFER_COLOR_SPACE == 2)
-        #define _SOOP_COLOUR_SPACE SOOP_SCRGB
-    #elif (BUFFER_COLOR_SPACE == 3)
-        #define _SOOP_COLOUR_SPACE SOOP_HDR10
-    #else
-        #define _SOOP_COLOUR_SPACE SOOP_SRGB
-    #endif
-#endif
+#include ".\smolbbsoop\smolbbsoop_Global.fxh"
 
 #if _SOOP_COLOUR_SPACE == 2
 
 	#include "Reshade.fxh"
 	
 //============================================================================================
-// Functions
+// Shader (Before)
 //============================================================================================
 	
-	float3 InvTonemap(float3 colour)
+	void ConvertBufferBefore(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 colour : SV_Target)
 	{
-	    return colour / (1.0 - colour);
+	    float4 LinearColour = tex2D(ReShade::BackBuffer, texcoord);
+	    float3 TonemappedColour = Reinhard(LinearColour.rgb);
+	    float3 sRGBColour = LinearToSRGB(TonemappedColour.rgb);
+	
+	    colour = float4(sRGBColour, LinearColour.a);
 	}
 	
-	// thanks to TreyM for posting this in the ReShade Discord's code chat :3
-	float3 sRGBToLinear(float3 colour)
-	{
-	    return colour < 0.04045 ? colour / 12.92 : pow((colour + 0.055) / 1.055, 2.4);
-	}
-	
 //============================================================================================
-// Shader
+// Shader (After)
 //============================================================================================
 	
-	void ConvertBuffer(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 colour : SV_Target)
+	void ConvertBufferAfter(float4 position : SV_Position, float2 texcoord : TEXCOORD, out float4 colour : SV_Target)
 	{
 	    float4 sRGBColour = tex2D(ReShade::BackBuffer, texcoord);
 	    float3 LinearColour = sRGBToLinear(sRGBColour.rgb);
-	    float3 InvTonemappedColour = InvTonemap(LinearColour.rgb);
+	    float3 InvTonemappedColour = InvReinhard(LinearColour.rgb);
 	
 	    colour = float4(InvTonemappedColour, sRGBColour.a);
 	}
@@ -75,30 +59,56 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // Technique / Passes
 //============================================================================================
 	
-	technique SRGBToLinear < 
-		ui_label = "sRGB to Linear"; 
-		ui_tooltip = "A simple shader to convert sRGB to scene linear. \nUseful for working with SDR only shaders when working in scRGB HDR"; 
+	technique LinearTosRGB < 
+		ui_label = "scRGB Converter (Before)"; 
+		ui_tooltip = "A simple shader to convert scRGB HDR to sRGB SDR. \nUseful for working with SDR only shaders when working in scRGB HDR"; 
 		>
 	{
 	    pass
 	    {
 	        VertexShader = PostProcessVS;
-	        PixelShader  = ConvertBuffer;
+	        PixelShader  = ConvertBufferBefore;
 	    }
 	}
-#else
+	technique sRGBToLinear < 
+		ui_label = "scRGB Converter (After)"; 
+		ui_tooltip = "A simple shader to convert sRGB SDR to scRGB HDR. \nUseful for working with SDR only shaders when working in scRGB HDR"; 
+		>
+	{
+	    pass
+	    {
+	        VertexShader = PostProcessVS;
+	        PixelShader  = ConvertBufferAfter;
+	    }
+	}
+#elif _SOOP_COLOUR_SPACE == 1
 	uniform int ColourSpaceWarning <
 		ui_type = "radio";
-		ui_text = "The detected colour space is not intended to be used with this shader."
+		ui_text = "The detected colour space (sRGB SDR) is not intended to be used with this shader."
 			"\nPlease ensure you are playing in scRGB HDR when using this shader. \nThis shader cannot convert SDR to HDR."
-			"\n\nIf the HDR format has been detected incorrectly, please manually add the _SOOP_COLOUR_SPACE Global Preprocessor to override to the correct format."
+			"\n\nIf the HDR format has been detected incorrectly, please use the _SOOP_COLOUR_SPACE Global Preprocessor to override to the correct format."
 			"\nFor this shader, override to SOOP_SCRGB";
 		ui_label = " ";
 		> = 0;
 			
-	technique SRGBToLinear <
-		ui_label = "sRGB to Linear (Error)";
-	    ui_tooltip = "A simple shader to convert sRGB to scene linear. \nUseful for working with SDR only shaders when working in scRGB HDR \nThe detected colour space is not HDR!";
+	technique CompilationErrorsRGB <
+		ui_label = "scRGB Converter (Error)";
+		ui_tooltip = "A simple shader to convert sRGB to HDR10 PQ. \nUseful for working with SDR only shaders when working in scRGB HDR \nThe detected colour space is not HDR!";
+		>	
+	{ }
+#elif _SOOP_COLOUR_SPACE == 3
+	uniform int ColourSpaceWarning <
+		ui_type = "radio";
+		ui_text = "The detected colour space (HDR10 PQ) is not intended to be used with this shader."
+			"\nPlease ensure you are playing in scRGB HDR when using this shader. \nThis shader cannot convert SDR to HDR."
+			"\n\nIf the HDR format has been detected incorrectly, please use the _SOOP_COLOUR_SPACE Global Preprocessor to override to the correct format."
+			"\nFor this shader, override to SOOP_SCRGB";
+		ui_label = " ";
+		> = 0;
+			
+	technique CompilationErrorHDR10 <
+		ui_label = "scRGB Converter (Error)";
+		ui_tooltip = "A simple shader to convert sRGB to HDR10 PQ. \nUseful for working with SDR only shaders when working in scRGB HDR \nThe detected colour space is not scRGB HDR!";
 		>	
 	{ }
 #endif

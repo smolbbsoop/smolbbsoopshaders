@@ -23,106 +23,95 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // Definitions
 //============================================================================================
 
-#define SOOP_SRGB 1
-#define SOOP_SCRGB 2
-#define SOOP_HDR10 3
-
-#ifndef _SOOP_COLOUR_SPACE
-    #if (BUFFER_COLOR_SPACE == 1)
-        #define _SOOP_COLOUR_SPACE SOOP_SRGB
-    #elif (BUFFER_COLOR_SPACE == 2)
-        #define _SOOP_COLOUR_SPACE SOOP_SCRGB
-    #elif (BUFFER_COLOR_SPACE == 3)
-        #define _SOOP_COLOUR_SPACE SOOP_HDR10
-    #else
-        #define _SOOP_COLOUR_SPACE SOOP_SRGB
-    #endif
-#endif
+#include ".\smolbbsoop\smolbbsoop_Global.fxh"
 
 #if _SOOP_COLOUR_SPACE == 3
-	
+
 	#include "ReShade.fxh"
-	
+
 //============================================================================================
-// Functions
+// Shader (Before)
 //============================================================================================
 
-	float PQToLinear(float x)
+	float4 ConvertBufferBefore(float4 pos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target
 	{
-	    float m1 = 0.1593017578125;
-	    float m2 = 78.84375;
-	    float c1 = 0.8359375;
-	    float c2 = 18.8515625;
-	    float c3 = 18.6875;
+	    float3 sRGBColour = tex2D(ReShade::BackBuffer, texcoord).rgb;
+	    float3 LinearColour = sRGBToLinear(sRGBColour);
 	
-	    float num = max(pow(x, 1.0 / m2) - c1, 0.0);
-	    float den = c2 - c3 * pow(x, 1.0 / m2);
-	    return pow(num / den, 1.0 / m1) * 80.0;
-	}
+	    float3 Rec2020Colour = Rec709ToRec2020(LinearColour);
+
+	    float3 TonemappedColour = InvReinhard(Rec2020Colour);
+	    float3 HDRColour = LinearToPQ(TonemappedColour.rgb);
 	
-	float3 ReinhardTonemap(float3 x)
-	{
-	    return x / (1.0 + x);
-	}
-	
-	// thanks to TreyM for posting this in the ReShade Discord's code chat :3
-	float3 LinearTosRGB(float3 x)
-	{
-	    return x < 0.0031308 ? 12.92 * x : 1.055 * pow(x, 1.0 / 2.4) - 0.055;
-	}
-	
-	float3 Rec2020ToRec709(float3 colour)
-	{
-	    return mul(float3x3
-		(
-	        0.6274, 0.3293, 0.0433,
-	        0.0691, 0.9195, 0.0114,
-	        0.0164, 0.0880, 0.8956
-	    ), colour);
+	    return float4(HDRColour, 1.0);
 	}
 	
 //============================================================================================
-// Shader
+// Shader (After)
 //============================================================================================
-	
-	float4 ConvertBuffer(float4 pos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target
+
+	float4 ConvertBufferAfter(float4 pos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target
 	{
 	    float3 HDRColour = tex2D(ReShade::BackBuffer, texcoord).rgb;
-	    float3 LinearColour = float3(PQToLinear(HDRColour.r), PQToLinear(HDRColour.g), PQToLinear(HDRColour.b));
+	    float3 LinearColour = PQToLinear(HDRColour.rgb);
 	
 	    float3 Rec709Colour = Rec2020ToRec709(LinearColour);
 	
-	    float3 TonemappedColour = ReinhardTonemap(Rec709Colour);
+	    float3 TonemappedColour = Reinhard(Rec709Colour);
 	    float3 sRGBColour = float3(LinearTosRGB(TonemappedColour.rgb));
 	
 	    return float4(sRGBColour, 1.0);
 	}
-	
+
 //============================================================================================
 // Technique / Passes
 //============================================================================================
 	
-	technique sRGBToHDR10 < ui_label = "sRGB To HDR10 PQ"; ui_tooltip = "A simple shader to convert sRGB to HDR10 PQ. Useful for working with SDR only shaders when working in HDR10"; >
+	technique HDR10ToSDR < ui_label = "HDR10 Converter (Before)"; ui_tooltip = "A simple shader to convert HDR10 PQ to sRGB. \nUseful for working with SDR only shaders when working in HDR10."; >
 	{
 	    pass
 	    {
 	        VertexShader = PostProcessVS;
-	        PixelShader  = ConvertBuffer;
+	        PixelShader  = ConvertBufferBefore;
 	    }
 	}
-#else
+	
+	technique SDRToHDR10 < ui_label = "HDR10 Converter (After)"; ui_tooltip = "A simple shader to convert sRGB to HDR10 PQ. \nUseful for working with SDR only shaders when working in HDR10."; >
+	{
+	    pass
+	    {
+	        VertexShader = PostProcessVS;
+	        PixelShader  = ConvertBufferAfter;
+	    }
+	}
+#elif _SOOP_COLOUR_SPACE == 1
 	uniform int ColourSpaceWarning <
 		ui_type = "radio";
-		ui_text = "The detected colour space is not intended to be used with this shader."
+		ui_text = "The detected colour space (sRGB SDR) is not intended to be used with this shader."
 			"\nPlease ensure you are playing in HDR10 PQ when using this shader. \nThis shader cannot convert SDR to HDR."
 			"\n\nIf the HDR format has been detected incorrectly, please use the _SOOP_COLOUR_SPACE Global Preprocessor to override to the correct format."
 			"\nFor this shader, override to SOOP_HDR10";
 		ui_label = " ";
 		> = 0;
 			
-	technique HDR10TosRGB <
-		ui_label = "HDR10 PQ to sRGB (Error)";
-		ui_tooltip = "A simple shader to convert HDR10 PQ to sRGB. \nUseful for working with SDR only shaders when working in scRGB HDR \nThe detected colour space is not HDR!";
+	technique CompilationErrorsRGB <
+		ui_label = "HDR10 Converter (Error)";
+		ui_tooltip = "A simple shader to convert sRGB to HDR10 PQ. \nUseful for working with SDR only shaders when working in scRGB HDR \nThe detected colour space is not HDR!";
+		>	
+	{ }
+#elif _SOOP_COLOUR_SPACE == 2
+	uniform int ColourSpaceWarning <
+		ui_type = "radio";
+		ui_text = "The detected colour space (scRGB HDR) is not intended to be used with this shader."
+			"\nPlease ensure you are playing in HDR10 PQ when using this shader. \nThis shader cannot convert SDR to HDR."
+			"\n\nIf the HDR format has been detected incorrectly, please use the _SOOP_COLOUR_SPACE Global Preprocessor to override to the correct format."
+			"\nFor this shader, override to SOOP_HDR10";
+		ui_label = " ";
+		> = 0;
+			
+	technique CompilationErrorscRGB <
+		ui_label = "HDR10 Converter (Error)";
+		ui_tooltip = "A simple shader to convert sRGB to HDR10 PQ. \nUseful for working with SDR only shaders when working in scRGB HDR \nThe detected colour space is not HDR10 PQ!";
 		>	
 	{ }
 #endif
