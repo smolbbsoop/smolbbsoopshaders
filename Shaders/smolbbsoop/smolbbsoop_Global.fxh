@@ -95,12 +95,13 @@
 
 	float3 PQToLinear(float3 x)
 	{
-	    float3 num = max(pow(x, 1.0 / PQ_m2) - PQ_c1, 0.0);
-	    float3 den = PQ_c2 - PQ_c3 * pow(x, 1.0 / PQ_m2);
+	    float3 xpow = pow(max(x, 0.0), 1.0 / PQ_m2);
+	    float3 num = max(xpow - PQ_c1, 0.0);
+	    float3 den = max(PQ_c2 - PQ_c3 * xpow, 1e-10);
 	    
 	    float scalingFactor = 20375.99 * pow(PeakBrightness, -0.995);
-    
-    	return pow(num / den, 1.0 / PQ_m1) * scalingFactor;
+	    
+	    return pow(num / den, 1.0 / PQ_m1) * scalingFactor;
 	}
 	
 	float3 Reinhard(float3 x)
@@ -121,11 +122,12 @@
 	float3 LinearToPQ(float3 x)
 	{
 	    float S = 0.003789 * PeakBrightness;
-		float3 x_scaled = x * S;
-		float3 Y = clamp(x_scaled / 80.0, 0.0, 1.0);
+	    float3 x_scaled = x * S;
+	    float3 Y = clamp(x_scaled / 80.0, 0.0, 1.0);
 	    
-	    float3 num = PQ_c1 + PQ_c2 * pow(Y, PQ_m1);
-	    float3 den = 1.0 + PQ_c3 * pow(Y, PQ_m1);
+	    float3 Ym1 = pow(Y, PQ_m1);
+	    float3 num = PQ_c1 + PQ_c2 * Ym1;
+	    float3 den = 1.0 + PQ_c3 * Ym1;
 	    
 	    return pow(num / den, PQ_m2);
 	}
