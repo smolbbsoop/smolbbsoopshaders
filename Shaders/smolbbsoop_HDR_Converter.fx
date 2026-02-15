@@ -11,7 +11,7 @@ conditions:
 The above copyright notice and this permission notice shall be included in all copies 
 or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
 INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
 PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
 HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
@@ -42,7 +42,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	    float4 LinearColour = tex2D(ReShade::BackBuffer, texcoord);
 	    float3 TonemappedColour = Reinhard(LinearColour.rgb);
 	    float3 sRGBColour = LinearToSRGB(TonemappedColour.rgb);
-	
+
 	    colour = float4(sRGBColour, LinearColour.a);
 	}
 	
@@ -55,7 +55,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	    float4 sRGBColour = tex2D(ReShade::BackBuffer, texcoord);
 	    float3 LinearColour = sRGBToLinear(sRGBColour.rgb);
 	    float3 InvTonemappedColour = InvReinhard(LinearColour.rgb);
-	
+
 	    colour = float4(InvTonemappedColour, sRGBColour.a);
 	}
 
@@ -102,11 +102,12 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	{
 	    float3 HDRColour = tex2D(ReShade::BackBuffer, texcoord).rgb;
 	    float3 LinearColour = PQToLinear(HDRColour.rgb);
-		float3 sRGBColour = LinearTosRGB(LinearColour);
-		
-	    float3 TonemappedColour = Reinhard(sRGBColour);
-	
-	    return float4(TonemappedColour, 1.0);
+	    
+	    // Apply tonemap in linear space, then convert to sRGB
+	    float3 TonemappedLinear = Reinhard(LinearColour);
+	    float3 sRGBColour = LinearTosRGB(TonemappedLinear);
+
+	    return float4(sRGBColour, 1.0);
 	}
 
 //==================================================
@@ -116,11 +117,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	float4 ConvertBufferAfter(float4 pos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target
 	{
 	    float3 sRGBColour = tex2D(ReShade::BackBuffer, texcoord).rgb;
-		float3 TonemappedColour = InvReinhard(sRGBColour);
-	    float3 LinearColour = sRGBToLinear(TonemappedColour);
 	    
-	    float3 HDRColour = LinearToPQ(LinearColour);
-	
+	    // Convert to linear, then inverse tonemap
+	    float3 LinearColour = sRGBToLinear(sRGBColour);
+	    float3 InvTonemappedLinear = InvReinhard(LinearColour);
+	    
+	    float3 HDRColour = LinearToPQ(InvTonemappedLinear);
+
 	    return float4(HDRColour, 1.0);
 	}
 
