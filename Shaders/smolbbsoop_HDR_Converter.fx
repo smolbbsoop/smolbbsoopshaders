@@ -101,10 +101,11 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	float4 ConvertBufferBefore(float4 pos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target
 	{
 	    float3 HDRColour = tex2D(ReShade::BackBuffer, texcoord).rgb;
-	    float3 LinearColour = PQToLinear(HDRColour.rgb);
+	    float3 LinearBt2020Colour = PQToLinear(HDRColour.rgb);
+		float3 LinearBt709Colour = Bt2020FromBt709(LinearBt2020Colour);
 	    
 	    // Apply tonemap in linear space, then convert to sRGB
-	    float3 TonemappedLinear = Reinhard(LinearColour);
+	    float3 TonemappedLinear = Reinhard(LinearBt709Colour);
 	    float3 sRGBColour = LinearTosRGB(TonemappedLinear);
 
 	    return float4(sRGBColour, 1.0);
@@ -121,8 +122,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	    // Convert to linear, then inverse tonemap
 	    float3 LinearColour = sRGBToLinear(sRGBColour);
 	    float3 InvTonemappedLinear = InvReinhard(LinearColour);
-	    
-	    float3 HDRColour = LinearToPQ(InvTonemappedLinear);
+	    float3 LinearBt2020Colour = Bt709FromBt2020(InvTonemappedLinear);
+	    float3 HDRColour = LinearToPQ(LinearBt2020Colour);
 
 	    return float4(HDRColour, 1.0);
 	}

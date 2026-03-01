@@ -89,6 +89,41 @@
 			ui_tooltip = "Input HDR Peak Brightness. Setting the correct value ensures the conversion is as accurate as possible";
 		> = 1000;
 
+//============================================================================================
+// Color Spaces Conversion Matrices and Functions
+// From https://github.com/clshortfuse/renodx/tree/main/src/shaders
+//============================================================================================
+
+static const float3x3 BT709_TO_XYZ_MAT = float3x3(
+    0.4123907993f, 0.3575843394f, 0.1804807884f,
+    0.2126390059f, 0.7151686788f, 0.0721923154f,
+    0.0193308187f, 0.1191947798f, 0.9505321522f);
+
+static const float3x3 XYZ_TO_BT709_MAT = float3x3(
+    3.2409699419f, -1.5373831776f, -0.4986107603f,
+    -0.9692436363f, 1.8759675015f, 0.0415550574f,
+    0.0556300797f, -0.2039769589f, 1.0569715142f);
+
+static const float3x3 BT2020_TO_XYZ_MAT = float3x3(
+    0.6369580483f, 0.1446169036f, 0.1688809752f,
+    0.2627002120f, 0.6779980715f, 0.0593017165f,
+    0.0000000000f, 0.0280726930f, 1.0609850577f);
+
+static const float3x3 XYZ_TO_BT2020_MAT = float3x3(
+    1.7166511880f, -0.3556707838f, -0.2533662814f,
+    -0.6666843518f, 1.6164812366f, 0.0157685458f,
+    0.0176398574f, -0.0427706133f, 0.9421031212f);
+
+//static const float3x3 BT709_TO_BT2020_MAT = mul(XYZ_TO_BT2020_MAT, BT709_TO_XYZ_MAT);
+//static const float3x3 BT2020_TO_BT709_MAT = mul(XYZ_TO_BT709_MAT, BT2020_TO_XYZ_MAT);
+
+	float3 Bt709FromBt2020(float3 bt2020){
+		return mul(mul(XYZ_TO_BT709_MAT, BT2020_TO_XYZ_MAT), bt2020);
+	}
+	float3 Bt2020FromBt709(float3 bt709){
+		return mul(mul(XYZ_TO_BT2020_MAT, BT709_TO_XYZ_MAT), bt709);
+	}
+
 //==============================================================
 // Functions (After)
 //==============================================================
